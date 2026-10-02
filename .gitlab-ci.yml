@@ -1,0 +1,160 @@
+stages:
+  - build
+  - test
+  - publish
+  - release
+  - database
+  - optimize
+
+default:
+  tags:
+    - build-gcp
+
+variables:
+  CONTAINER_REGISTRY: ${CI_REGISTRY_IMAGE}/application
+  
+build:
+  stage: build
+  script:
+    - cp .env.example .env
+    - docker build -t $CONTAINER_REGISTRY:${CI_COMMIT_TAG} -t $CONTAINER_REGISTRY:latest -f Dockerfile .
+  except:
+    - branches
+  artifacts:
+    paths:
+      - .env
+    expire_in: 1 days
+    when: always
+
+automation-test:
+  stage: test
+  dependencies:
+    - build
+  script:
+    - echo run tests in this section
+  except:
+    - branches
+
+vulnerabilities-test:
+  stage: test
+  dependencies:
+    - build
+  script:
+    - echo run tests in this section
+  except:
+    - branches
+
+publish:
+  stage: publish
+  dependencies:
+    - automation-test
+    - vulnerabilities-test
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker push $CONTAINER_REGISTRY:${CI_COMMIT_TAG}
+    - docker push $CONTAINER_REGISTRY:latest
+  except:
+    - branches
+  artifacts:
+    paths:
+      - .env
+    expire_in: 1 days
+    when: always
+
+production:
+  stage: release
+  dependencies:
+    - publish
+  variables:
+    GIT_STRATEGY: none
+    ENVI: production
+  script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - echo "$ENV_RELEASE" > "$(pwd)/.env"
+    - echo "$SUPERVISOR" > "$(pwd)/supervisord.conf"
+    - echo "$NOTIFIER" > "$(pwd)/notifier.sh"
+    - echo "$DOCKER_COMPOSE_NGINX" | base64 --decode > "$(pwd)/docker-compose.yml"
+    - docker compose pull application && docker compose up -d --force-recreate
+    - docker compose ps -q application
+    - docker image prune -f
+    # - bash notifier.sh
+  tags:
+    - production-gcp
+  only:
+    - /^([A-Za-z0-9.-]+)$/
+  except:
+    - branches
+  artifacts:
+    paths:
+      - .env
+      - docker-compose.yml
+    expire_in: 1 days
+    when: always
+
+production-migration:
+  stage: database
+  variables:
+    GIT_STRATEGY: none
+  dependencies:
+    - production
+  script:
+    - docker compose exec -T --user root application php artisan config:clear|| php artisan migrate
+  tags:
+    - production-gcp
+  only:
+    - /^([A-Za-z0-9.-]+)$/
+  except:
+    - branches
+  artifacts:
+    paths:
+      - .env
+      #- storage/firebase-admin-sdk.json
+    expire_in: 1 days
+    when: always
+  needs:
+    - job: production
+
+production-seeding:
+  stage: database
+  variables:
+    GIT_STRATEGY: none
+  dependencies:
+    - production
+  script:
+    - docker compose exec -T --user root application php artisan migrate:fresh --seed
+  tags:
+    - production-gcp
+  only:
+    - /^([A-Za-z0-9.-]+)$/
+  except:
+    - branches
+  artifacts:
+    paths:
+      - .env
+      #- storage/firebase-admin-sdk.json
+    expire_in: 1 days
+    when: always
+  when: manual
+
+production-optimize:
+  stage: optimize
+  variables:
+    GIT_STRATEGY: none
+  dependencies:
+    - production-migration
+  script:
+    - docker compose exec -T --user root application php artisan optimize || true
+  tags:
+    - production-gcp
+  only:
+    - /^([A-Za-z0-9.-]+)$/
+  except:
+    - branches
+  artifacts:
+    paths:
+      - .env
+      #- storage/firebase-admin-sdk.json
+    expire_in: 1 days
+    when: always
+  needs:
+    - job: production-migration
