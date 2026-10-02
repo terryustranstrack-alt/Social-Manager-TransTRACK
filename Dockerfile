@@ -10,8 +10,11 @@ RUN docker-php-ext-configure mysqli \
     && docker-php-ext-install pdo pdo_mysql mysqli bcmath
 RUN docker-php-ext-configure gd --with-freetype=/usr/include/ --with-jpeg=/usr/include/ \
     && docker-php-ext-install gd \
-    && docker-php-ext-install zip \
-    && docker-php-ext-install bcmath
+    && docker-php-ext-install zip
+# ext-redis is required because REDIS_CLIENT=phpredis and both
+# QUEUE_CONNECTION and CACHE_STORE are set to redis.
+RUN pecl install redis \
+    && docker-php-ext-enable redis
 
 # Create a user and group for the application
 RUN groupadd -g 1000 www
