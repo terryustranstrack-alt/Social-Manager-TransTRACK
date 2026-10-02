@@ -1,0 +1,35 @@
+# Keep secrets and VCS metadata out of the image.
+# CI creates .env from .env.example *before* running `docker build`, so without
+# this file the real secrets (DB password, OAuth client secrets) would be
+# committed into an image layer on every build.
+.env
+.env.*
+!.env.example
+
+.git
+.gitignore
+.gitattributes
+.github
+.gitlab-ci.yml
+
+# Installed inside the image by the Dockerfile; copying the host copies in
+# stale binaries and wastes several hundred MB of layer space.
+vendor/
+node_modules/
+
+# Generated inside the image.
+public/build/
+public/hot/
+public/storage/
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/logs/*
+bootstrap/cache/*.php
+
+npm-debug.log
+yarn-error.log
+node_modules/.vite
+.idea
+.vscode
+.DS_Store

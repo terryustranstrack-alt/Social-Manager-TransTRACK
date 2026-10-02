@@ -98,7 +98,7 @@ production-migration:
   dependencies:
     - production
   script:
-    - docker compose exec -T --user root application php artisan config:clear|| php artisan migrate
+    - docker compose exec -T --user root application sh -lc 'php artisan config:clear && php artisan migrate --force'
   tags:
     - production-gcp
   only:

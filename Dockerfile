@@ -27,8 +27,12 @@ RUN composer install --optimize-autoloader --no-dev
 # Install NPM dependencies and build assets
 RUN npm install
 
-# Cache configuration and create storage link
-RUN php artisan config:cache
+# Create the public storage symlink.
+# NOTE: config caching is intentionally NOT done here. This image is built
+# before the production .env exists (CI uses GIT_STRATEGY: none and writes .env
+# only at deploy time), so `config:cache` at build time would bake empty
+# APP_KEY/DB credentials into bootstrap/cache/config.php and that stale cache
+# would take precedence over the real .env at runtime.
 RUN php artisan storage:link
 
 # Set permissions for storage and cache directories
